@@ -107,6 +107,7 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
@@ -247,6 +248,71 @@ export default function AdminDashboard() {
     }
   };
 
+   const handleEditRole = (role: Role) => {
+    setEditingRole(role);
+    setNewRole({
+      name: role.name,
+      department: role.department,
+      permissions: { ...role.permissions }
+    });
+    setShowRoleForm(true);
+  };
+
+  const handleUpdateRole = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingRole) return;
+  
+  try {
+    setCreating(true);
+    const response = await fetch('/api/roles', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingRole._id, // Send ID in the request body
+        ...newRole
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    
+    setEditingRole(null);
+    setNewRole({
+      name: '',
+      department: 'General',
+      permissions: {
+        canCheckIn: true,
+        canManageEmployees: false,
+        canManageDepartments: false,
+        canManageRoles: false,
+        canAssignTasks: false,
+        canViewAllTasks: false,
+        canViewReports: false
+      }
+    });
+    setShowRoleForm(false);
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message);
+  } finally {
+    setCreating(false);
+  }
+};
+
+  const handleDeleteRole = async (roleId: string) => {
+  if (!confirm('Are you sure you want to delete this role?')) return;
+  
+  try {
+    const response = await fetch(`/api/roles?id=${roleId}`, { // Use query parameter
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message);
+  }
+};
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -542,88 +608,138 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Roles Tab */}
-        {activeTab === 'roles' && (
-          <div style={{ backgroundColor: '#fff', padding: '22px', borderRadius: '8px', marginBottom: '25px', boxShadow: '0 3px 6px rgba(0,0,0,0.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <h2 style={{ margin: 0 }}>Role Management</h2>
-              <button onClick={() => setShowRoleForm(!showRoleForm)} style={{ padding: '8px 18px', backgroundColor: showRoleForm ? '#6c757d' : '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                {showRoleForm ? 'Cancel' : 'Add Role'}
-              </button>
+  {/* Roles Tab */}
+  {activeTab === 'roles' && (
+    <div style={{ backgroundColor: '#fff', padding: '22px', borderRadius: '8px', marginBottom: '25px', boxShadow: '0 3px 6px rgba(0,0,0,0.08)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <h2 style={{ margin: 0 }}>Role Management</h2>
+        <button 
+          onClick={() => {
+            setEditingRole(null);
+            setNewRole({
+              name: '',
+              department: 'General',
+              permissions: {
+                canCheckIn: true,
+                canManageEmployees: false,
+                canManageDepartments: false,
+                canManageRoles: false,
+                canAssignTasks: false,
+                canViewAllTasks: false,
+                canViewReports: false
+              }
+            });
+            setShowRoleForm(!showRoleForm);
+          }} 
+          style={{ padding: '8px 18px', backgroundColor: showRoleForm ? '#6c757d' : '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          {showRoleForm ? 'Cancel' : 'Add Role'}
+        </button>
+      </div>
+
+      {showRoleForm && (
+        <div style={{ padding: '20px', border: '1px solid #dee2e6', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#f1f3f5' }}>
+          <h3 style={{ marginTop: 0 }}>{editingRole ? 'Edit Role' : 'Create New Role'}</h3>
+          <form onSubmit={editingRole ? handleUpdateRole : handleCreateRole} style={{ display: 'grid', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Name</label>
+              <input 
+                type="text" 
+                value={newRole.name} 
+                onChange={(e) => setNewRole({...newRole, name: e.target.value})} 
+                required 
+                disabled={creating} 
+                style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }} 
+              />
             </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Department</label>
+              <select 
+                value={newRole.department} 
+                onChange={(e) => setNewRole({...newRole, department: e.target.value})} 
+                disabled={creating} 
+                style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }}
+              >
+                {departments.map(dept => <option key={dept._id} value={dept.name}>{dept.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Permissions</label>
+              {Object.entries(newRole.permissions).map(([permission, value]) => (
+                <div key={permission} style={{ marginBottom: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => setNewRole({
+                        ...newRole,
+                        permissions: { ...newRole.permissions, [permission]: e.target.checked }
+                      })}
+                      disabled={creating}
+                    />
+                    <span>{permission.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+            <button 
+              type="submit" 
+              disabled={creating} 
+              style={{ padding: '12px 24px', backgroundColor: creating ? '#6c757d' : '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: creating ? 'not-allowed' : 'pointer' }}
+            >
+              {creating ? (editingRole ? 'Updating...' : 'Creating...') : (editingRole ? 'Update Role' : 'Create Role')}
+            </button>
+          </form>
+        </div>
+      )}
 
-            {showRoleForm && (
-              <div style={{ padding: '20px', border: '1px solid #dee2e6', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#f1f3f5' }}>
-                <h3 style={{ marginTop: 0 }}>Create New Role</h3>
-                <form onSubmit={handleCreateRole} style={{ display: 'grid', gap: '15px' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Name</label>
-                    <input type="text" value={newRole.name} onChange={(e) => setNewRole({...newRole, name: e.target.value})} required disabled={creating} style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Department</label>
-                    <select value={newRole.department} onChange={(e) => setNewRole({...newRole, department: e.target.value})} disabled={creating} style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }}>
-                      {departments.map(dept => <option key={dept._id} value={dept.name}>{dept.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Permissions</label>
-                    {Object.entries(newRole.permissions).map(([permission, value]) => (
-                      <div key={permission} style={{ marginBottom: '8px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input
-                            type="checkbox"
-                            checked={value}
-                            onChange={(e) => setNewRole({
-                              ...newRole,
-                              permissions: { ...newRole.permissions, [permission]: e.target.checked }
-                            })}
-                            disabled={creating}
-                          />
-                          <span>{permission.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <button type="submit" disabled={creating} style={{ padding: '12px 24px', backgroundColor: creating ? '#6c757d' : '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: creating ? 'not-allowed' : 'pointer' }}>
-                    {creating ? 'Creating...' : 'Create Role'}
-                  </button>
-                </form>
-              </div>
-            )}
-
-            <h3>Roles ({roles.length})</h3>
-            {roles.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#6c757d', padding: '20px' }}>No roles found</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f1f3f5' }}>
-                      <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Name</th>
-                      <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Department</th>
-                      <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Permissions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {roles.map(role => (
-                      <tr key={role._id}>
-                        <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{role.name}</td>
-                        <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{role.department}</td>
-                        <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
-                          {Object.entries(role.permissions)
-                            .filter(([_, value]) => value)
-                            .map(([permission]) => permission.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()))
-                            .join(', ')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+      <h3>Roles ({roles.length})</h3>
+      {roles.length === 0 ? (
+        <p style={{ textAlign: 'center', color: '#6c757d', padding: '20px' }}>No roles found</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f1f3f5' }}>
+                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Name</th>
+                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Department</th>
+                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Permissions</th>
+                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map(role => (
+                <tr key={role._id}>
+                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{role.name}</td>
+                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{role.department}</td>
+                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                    {Object.entries(role.permissions)
+                      .filter(([_, value]) => value)
+                      .map(([permission]) => permission.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()))
+                      .join(', ')}
+                  </td>
+                  <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+                    <button 
+                      onClick={() => handleEditRole(role)}
+                      style={{ padding: '6px 12px', backgroundColor: '#17a2b8', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '8px' }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteRole(role._id)}
+                      style={{ padding: '6px 12px', backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )}
 
         {/* Tasks Tab */}
         {activeTab === 'tasks' && (
