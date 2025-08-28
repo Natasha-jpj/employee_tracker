@@ -43,6 +43,7 @@ interface Task {
   status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
   dueDate: string;
   createdAt: string;
+  progressUpdates: { message: string; timestamp: string }[];
 }
 
 interface AttendanceRecord {
@@ -166,6 +167,8 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
