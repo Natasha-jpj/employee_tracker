@@ -17,6 +17,15 @@ type Task = {
   status: 'pending' | 'in-progress' | 'completed';
 };
 
+type LunchTime = {
+  _id: string;
+  employeeId: string;
+  employeeName: string;
+  startTime: string;
+  endTime: string;
+  days: string[];
+};
+
 export default function Dashboard() {
   const [employeeId, setEmployeeId] = useState<string>('');
   const [employeeName, setEmployeeName] = useState<string>('');
@@ -24,6 +33,8 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(true);
+  const [lunchTimes, setLunchTimes] = useState<LunchTime[]>([]);
+  const [loadingLunchTimes, setLoadingLunchTimes] = useState(true);
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const router = useRouter();
@@ -64,6 +75,22 @@ export default function Dashboard() {
     }
   }, []);
 
+   const loadLunchTimes = useCallback(async (empId: string) => {
+    if (!empId) return;
+    try {
+      const res = await fetch(`/api/lunchtimes?employeeId=${empId}`);
+      const data = await res.json();
+      setLunchTimes(data.lunchTimes || []);
+    } catch (e) {
+      console.error('Failed to load lunch times', e);
+    } finally {
+      setLoadingLunchTimes(false);
+    }
+  }, []);
+
+
+
+
   // Fetch tasks
   const loadTasks = useCallback(async (empId: string) => {
     if (!empId) return;
@@ -82,8 +109,9 @@ export default function Dashboard() {
     if (employeeId) {
       loadAttendance(employeeId);
       loadTasks(employeeId);
+      loadLunchTimes(employeeId); // Add this line
     }
-  }, [employeeId, loadAttendance, loadTasks]);
+  }, [employeeId, loadAttendance, loadTasks, loadLunchTimes]); // Add loadLunchTimes to dependencies
 
   // Auto "I'm working" popup every 15 min
   useEffect(() => {
@@ -171,6 +199,9 @@ export default function Dashboard() {
     return null;
   }
 
+
+  
+
   return (
     <div>
       <div style={{ position: 'relative', padding: '20px', backgroundColor: '#f8f9fa' }}>
@@ -253,6 +284,32 @@ export default function Dashboard() {
             </ul>
           )}
         </div>
+
+         {/* Lunch Time Section */}
+      <div style={{ marginTop: '30px' }}>
+        <h3>Your Lunch Schedule</h3>
+        {loadingLunchTimes ? (
+          <p>Loading lunch schedule...</p>
+        ) : lunchTimes.length === 0 ? (
+          <p>No lunch schedule assigned</p>
+        ) : (
+          <div>
+            {lunchTimes.map(lunchTime => (
+              <div key={lunchTime._id} style={{ 
+                marginBottom: '20px', 
+                padding: '15px', 
+                border: '1px solid #ddd', 
+                borderRadius: '5px',
+                backgroundColor: '#f9f9f9'
+              }}>
+                <h4>Lunch Time</h4>
+                <p><strong>Time:</strong> {lunchTime.startTime} - {lunchTime.endTime}</p>
+                <p><strong>Days:</strong> {lunchTime.days.join(', ')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
         {/* Progress Message Section */}
         <div style={{ marginTop: '30px' }}>

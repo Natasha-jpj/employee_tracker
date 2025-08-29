@@ -56,6 +56,15 @@ interface AttendanceRecord {
   createdAt: string;
 }
 
+interface LunchTime {
+  _id: string;
+  employeeId: string;
+  employeeName: string;
+  startTime: string; // Format: "HH:MM"
+  endTime: string;   // Format: "HH:MM"
+  days: string[];    // e.g., ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+}
+
 export default function AdminDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -105,6 +114,15 @@ export default function AdminDashboard() {
     priority: 'medium' as const,
     dueDate: ''
   });
+  const [lunchTimes, setLunchTimes] = useState<LunchTime[]>([]);
+const [showLunchForm, setShowLunchForm] = useState(false);
+const [editingLunchTime, setEditingLunchTime] = useState<LunchTime | null>(null);
+const [newLunchTime, setNewLunchTime] = useState({
+  employeeId: '',
+  startTime: '12:00',
+  endTime: '13:00',
+  days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+});
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,12 +154,13 @@ export default function AdminDashboard() {
       setError(null);
       setLoading(true);
 
-      const [employeesRes, departmentsRes, rolesRes, tasksRes, attendanceRes] = await Promise.all([
+      const [employeesRes, departmentsRes, rolesRes, tasksRes, attendanceRes,lunchTimesRes] = await Promise.all([
         fetch('/api/admin/employees'),
         fetch('/api/departments'),
         fetch('/api/roles'),
         fetch('/api/tasks'),
-        fetch('/api/admin/attendance')
+        fetch('/api/admin/attendance'),
+        fetch('/api/lunchtimes') 
       ]);
 
       if (!employeesRes.ok) throw new Error('Failed to fetch employees');
@@ -155,12 +174,14 @@ export default function AdminDashboard() {
       const rolesData = await rolesRes.json();
       const tasksData = await tasksRes.json();
       const attendanceData = await attendanceRes.json();
+       const lunchTimesData = await lunchTimesRes.json();
 
       setEmployees(employeesData.employees || []);
       setDepartments(departmentsData.departments || []);
       setRoles(rolesData.roles || []);
       setTasks(tasksData.tasks || []);
       setAttendance(attendanceData.attendance || []);
+      setLunchTimes(lunchTimesData.lunchTimes || []);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       setError(error.message || 'Failed to fetch data');
@@ -316,6 +337,95 @@ export default function AdminDashboard() {
     setError(error.message);
   }
 };
+
+const handleCreateLunchTime = async (e: React.FormEvent) => {
+  e.preventDefault();
+  try {
+    setCreating(true);
+    const response = await fetch('/api/lunchtimes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newLunchTime),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    
+    setNewLunchTime({
+      employeeId: '',
+      startTime: '12:00',
+      endTime: '13:00',
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    });
+    setShowLunchForm(false);
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message);
+  } finally {
+    setCreating(false);
+  }
+};
+
+const handleUpdateLunchTime = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingLunchTime) return;
+  
+  try {
+    setCreating(true);
+    const response = await fetch('/api/lunchtimes', { // Remove ID from URL
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingLunchTime._id, // Add ID to request body
+        ...newLunchTime
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    
+    setEditingLunchTime(null);
+    setNewLunchTime({
+      employeeId: '',
+      startTime: '12:00',
+      endTime: '13:00',
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    });
+    setShowLunchForm(false);
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message);
+  } finally {
+    setCreating(false);
+  }
+};
+
+const handleDeleteLunchTime = async (lunchTimeId: string) => {
+  if (!confirm('Are you sure you want to delete this lunch time?')) return;
+  
+  try {
+    const response = await fetch(`/api/lunchtimes?id=${lunchTimeId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message);
+  }
+};
+
+const handleEditLunchTime = (lunchTime: LunchTime) => {
+  setEditingLunchTime(lunchTime);
+  setNewLunchTime({
+    employeeId: lunchTime.employeeId,
+    startTime: lunchTime.startTime,
+    endTime: lunchTime.endTime,
+    days: [...lunchTime.days]
+  });
+  setShowLunchForm(true);
+};
+
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -387,7 +497,7 @@ export default function AdminDashboard() {
       {/* Navigation Tabs */}
       <div style={{ backgroundColor: '#fff', borderBottom: '1px solid #dee2e6' }}>
         <div style={{ display: 'flex', maxWidth: '1400px', margin: '0 auto', padding: '0 25px' }}>
-          {['attendance', 'employees', 'departments', 'roles', 'tasks'].map(tab => (
+          {['attendance', 'employees', 'departments', 'roles', 'tasks', 'lunchTime'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -842,9 +952,156 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+
+            
           </div>
         )}
+
+      {activeTab === 'lunchTime' && (
+  <div style={{ backgroundColor: '#fff', padding: '22px', borderRadius: '8px', marginBottom: '25px', boxShadow: '0 3px 6px rgba(0,0,0,0.08)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+      <h2 style={{ margin: 0 }}>Lunch Time Management</h2>
+      <button 
+        onClick={() => {
+          setEditingLunchTime(null);
+          setNewLunchTime({
+            employeeId: '',
+            startTime: '12:00',
+            endTime: '13:00',
+            days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+          });
+          setShowLunchForm(!showLunchForm);
+        }} 
+        style={{ padding: '8px 18px', backgroundColor: showLunchForm ? '#6c757d' : '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+      >
+        {showLunchForm ? 'Cancel' : 'Add Lunch Time'}
+      </button>
+    </div>
+
+    {showLunchForm && (
+      <div style={{ padding: '20px', border: '1px solid #dee2e6', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#f1f3f5' }}>
+        <h3 style={{ marginTop: 0 }}>{editingLunchTime ? 'Edit Lunch Time' : 'Assign Lunch Time'}</h3>
+        <form onSubmit={editingLunchTime ? handleUpdateLunchTime : handleCreateLunchTime} style={{ display: 'grid', gap: '15px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Employee</label>
+            <select 
+              value={newLunchTime.employeeId} 
+              onChange={(e) => setNewLunchTime({...newLunchTime, employeeId: e.target.value})} 
+              required 
+              disabled={creating} 
+              style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }}
+            >
+              <option value="">Select Employee</option>
+              {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name} ({emp.position})</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Start Time</label>
+              <input 
+                type="time" 
+                value={newLunchTime.startTime} 
+                onChange={(e) => setNewLunchTime({...newLunchTime, startTime: e.target.value})} 
+                required 
+                disabled={creating} 
+                style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }} 
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>End Time</label>
+              <input 
+                type="time" 
+                value={newLunchTime.endTime} 
+                onChange={(e) => setNewLunchTime({...newLunchTime, endTime: e.target.value})} 
+                required 
+                disabled={creating} 
+                style={{ width: '100%', padding: '10px', border: '1px solid #ced4da', borderRadius: '4px' }} 
+              />
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Days</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
+              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+                <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={newLunchTime.days.includes(day)}
+                    onChange={(e) => {
+                      const updatedDays = e.target.checked
+                        ? [...newLunchTime.days, day]
+                        : newLunchTime.days.filter(d => d !== day);
+                      setNewLunchTime({...newLunchTime, days: updatedDays});
+                    }}
+                    disabled={creating}
+                  />
+                  <span>{day}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button 
+            type="submit" 
+            disabled={creating} 
+            style={{ padding: '12px 24px', backgroundColor: creating ? '#6c757d' : '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: creating ? 'not-allowed' : 'pointer' }}
+          >
+            {creating ? (editingLunchTime ? 'Updating...' : 'Creating...') : (editingLunchTime ? 'Update Lunch Time' : 'Create Lunch Time')}
+          </button>
+        </form>
       </div>
+    )}
+
+    <h3>Assigned Lunch Times ({lunchTimes.length})</h3>
+    {lunchTimes.length === 0 ? (
+      <p style={{ textAlign: 'center', color: '#6c757d', padding: '20px' }}>No lunch times assigned</p>
+    ) : (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f1f3f5' }}>
+              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Employee</th>
+              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Start Time</th>
+              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>End Time</th>
+              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Days</th>
+              <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+  {lunchTimes.map(lunchTime => (
+    <tr key={lunchTime._id}>
+      <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+        {lunchTime.employeeName} {/* Use the employeeName from lunchTime data */}
+      </td>
+      <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{lunchTime.startTime}</td>
+      <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{lunchTime.endTime}</td>
+      <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>{lunchTime.days.join(', ')}</td>
+      <td style={{ padding: '12px', border: '1px solid #dee2e6' }}>
+        <button 
+          onClick={() => handleEditLunchTime(lunchTime)}
+          style={{ padding: '6px 12px', backgroundColor: '#17a2b8', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '8px' }}
+        >
+          Edit
+        </button>
+        <button 
+          onClick={() => handleDeleteLunchTime(lunchTime._id)}
+          style={{ padding: '6px 12px', backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+        </table>
+      </div>
+    )}
+  </div>
+)}
+        
+      </div>
+
+
+
 
       {/* Image Modal */}
       {showImageModal && selectedRecord && (
